@@ -812,6 +812,9 @@ Object? typeMapGetSnapshot(
 ///
 /// Mirrors: `isVisible` in Snapshot.js
 bool isVisible(Item item, dynamic snapshot) {
+  // A null snapshot means the current document state. The upstream helper
+  // accepts this form, and YText.toDelta() relies on it for normal rendering.
+  if (snapshot == null) return !item.deleted;
   // ignore: avoid_dynamic_calls
   final sv = snapshot.sv as Map<int, int>;
   // ignore: avoid_dynamic_calls
