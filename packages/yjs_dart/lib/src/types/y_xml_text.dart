@@ -8,6 +8,7 @@ import '../structs/item.dart';
 /// A shared XML text node. Its wire representation is Yjs type reference 6.
 class YXmlText extends YText {
   String? _prelimText;
+  Map<String, Object?>? _prelimAttributes;
 
   YXmlText() : super() {
     legacyTypeRef = typeRefXmlText;
@@ -18,7 +19,10 @@ class YXmlText extends YText {
     super.integrate(doc, item);
     final text = _prelimText;
     _prelimText = null;
-    if (text != null && text.isNotEmpty) insert(0, text);
+    if (text != null && text.isNotEmpty) {
+      insert(0, text, _prelimAttributes);
+    }
+    _prelimAttributes = null;
   }
 
   @override
@@ -28,6 +32,7 @@ class YXmlText extends YText {
         throw RangeError('Length exceeded!');
       }
       _prelimText = index == 0 ? text : '${_prelimText ?? ''}$text';
+      _prelimAttributes = attributes;
       return;
     }
     super.insert(index, text, attributes);
