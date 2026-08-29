@@ -144,6 +144,7 @@ func (a *ProjectAPI) RegisterRoutes(group *echo.Group) {
 // @Produce json
 // @Param limit query int false "每页数量，默认 50，最大 100"
 // @Param cursor query string false "项目分页游标"
+// @Param keyword query string false "按项目名称或描述搜索"
 // @Success 200 {object} successEnvelope{data=projectListResponse}
 // @Failure 400 {object} errorEnvelope
 // @Failure 401 {object} errorEnvelope
@@ -160,7 +161,7 @@ func (a *ProjectAPI) list(c echo.Context) error {
 	if err != nil {
 		return writeProjectError(c, err)
 	}
-	result, err := a.projects.List(c.Request().Context(), project.ListCommand{AccountID: current.ID, Limit: limit, Cursor: c.QueryParam("cursor"), IncludePersonal: true})
+	result, err := a.projects.List(c.Request().Context(), project.ListCommand{AccountID: current.ID, Limit: limit, Cursor: c.QueryParam("cursor"), Keyword: c.QueryParam("keyword"), IncludePersonal: true})
 	if err != nil {
 		return writeProjectError(c, err)
 	}

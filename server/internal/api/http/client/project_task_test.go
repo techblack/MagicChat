@@ -36,6 +36,13 @@ func TestProjectAndTaskAPIsMapAuthenticatedAccountToApplicationCommands(t *testi
 		t.Fatalf("project status = %d, command = %#v, body = %s", projectRecorder.Code, projects.create, projectRecorder.Body.String())
 	}
 
+	listRequest := httptest.NewRequest(http.MethodGet, "/api/client/projects?keyword=release&cursor=next&limit=20", nil)
+	listRecorder := httptest.NewRecorder()
+	router.ServeHTTP(listRecorder, listRequest)
+	if listRecorder.Code != http.StatusOK || projects.list.AccountID != "account-1" || projects.list.Keyword != "release" || projects.list.Cursor != "next" || projects.list.Limit != 20 {
+		t.Fatalf("project list status = %d, command = %#v, body = %s", listRecorder.Code, projects.list, listRecorder.Body.String())
+	}
+
 	taskRequest := httptest.NewRequest(http.MethodPost, "/api/client/projects/project-1/tasks", bytes.NewBufferString(`{"title":"Ship","assignee_user_id":null}`))
 	taskRequest.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	taskRecorder := httptest.NewRecorder()
@@ -45,9 +52,13 @@ func TestProjectAndTaskAPIsMapAuthenticatedAccountToApplicationCommands(t *testi
 	}
 }
 
-type fakeProjectService struct{ create project.CreateCommand }
+type fakeProjectService struct {
+	create project.CreateCommand
+	list   project.ListCommand
+}
 
-func (s *fakeProjectService) List(context.Context, project.ListCommand) (project.ListResult, error) {
+func (s *fakeProjectService) List(_ context.Context, cmd project.ListCommand) (project.ListResult, error) {
+	s.list = cmd
 	return project.ListResult{}, nil
 }
 func (s *fakeProjectService) Create(_ context.Context, cmd project.CreateCommand) (project.Project, error) {
