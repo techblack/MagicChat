@@ -195,6 +195,64 @@ test("builds nested topic rows and omits stale, archived, and orphan topics", ()
   )
 })
 
+test("filters conversations like the web sidebar and keeps unread topics with parents", () => {
+  const group = conversation({
+    id: "group",
+    name: "项目群",
+    type: "group",
+  })
+  const unreadTopic = {
+    ...topicConversation({
+      id: "unread-topic",
+      lastMessageAt: "2026-07-30T07:59:00Z",
+      parent: group,
+    }),
+    unreadCount: 1,
+  }
+  const readTopic = topicConversation({
+    id: "read-topic",
+    lastMessageAt: "2026-07-30T07:58:00Z",
+    parent: group,
+  })
+  const direct = conversation({ id: "direct", type: "direct" })
+  const app = conversation({ id: "app", type: "app" })
+  const unreadDirect = conversation({
+    id: "unread-direct",
+    lastMessageSeq: 3,
+    lastReadSeq: 2,
+    type: "direct",
+    unreadCount: 0,
+  })
+  const items = (filter: "all" | "unread" | "direct" | "group") =>
+    buildConversationListItems({
+      contacts: EMPTY_CONTACTS,
+      conversations: [
+        readTopic,
+        unreadTopic,
+        group,
+        direct,
+        app,
+        unreadDirect,
+      ],
+      currentUserId: "me",
+      filter,
+      keyword: "",
+      now: new Date("2026-07-30T08:00:00Z"),
+    }).map((item) => item.conversation.id)
+
+  assert.deepEqual(items("all"), [
+    "group",
+    "unread-topic",
+    "read-topic",
+    "app",
+    "direct",
+    "unread-direct",
+  ])
+  assert.deepEqual(items("unread"), ["group", "unread-topic", "unread-direct"])
+  assert.deepEqual(items("direct"), ["app", "direct", "unread-direct"])
+  assert.deepEqual(items("group"), ["group", "unread-topic", "read-topic"])
+})
+
 test("prefixes senders only for groups and group topics", () => {
   const now = new Date("2026-07-30T08:00:00Z")
   const group = conversation({

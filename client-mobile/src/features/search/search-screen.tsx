@@ -1,4 +1,5 @@
 import { useRouter } from "expo-router"
+import { useQuery } from "@tanstack/react-query"
 import { useMemo, useState } from "react"
 import { Keyboard } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
@@ -13,6 +14,8 @@ import {
 } from "@/features/search/search-model"
 import { buildConversationHref } from "@/navigation/conversations"
 import { buildEntityDetailHref } from "@/navigation/entity-details"
+import { buildProjectHref } from "@/navigation/projects"
+import { messageSearchQueryOptions } from "@/data/query"
 import { useClientData } from "@/providers/client-data-provider"
 import { XGUIFilledSearchBar, useXGUITheme } from "@/xgui"
 
@@ -30,6 +33,7 @@ export function SearchScreen() {
   } = useClientData()
   const [keyword, setKeyword] = useState("")
   const hasKeyword = keyword.trim().length > 0
+  const messageSearch = useQuery(messageSearchQueryOptions(session, keyword))
   const results = useMemo(
     () =>
       buildGlobalSearchResults({
@@ -37,6 +41,7 @@ export function SearchScreen() {
         conversations,
         currentUserId: currentUser?.id ?? null,
         keyword,
+        messages: messageSearch.data,
         personalProject,
         projects,
       }),
@@ -45,6 +50,7 @@ export function SearchScreen() {
       conversations,
       currentUser?.id,
       keyword,
+      messageSearch.data,
       personalProject,
       projects,
     ]
@@ -56,11 +62,22 @@ export function SearchScreen() {
   }
 
   function handleResultPress(result: GlobalSearchResult) {
-    if (result.type === "project") return
-
     Keyboard.dismiss()
+    if (result.type === "project") {
+      router.push(buildProjectHref(result.project.id))
+      return
+    }
     if (result.type === "conversation") {
       router.push(buildConversationHref(result.conversation.id))
+      return
+    }
+    if (result.type === "message") {
+      router.push(
+        buildConversationHref(
+          result.message.conversation.id,
+          result.message.message.id
+        )
+      )
       return
     }
 
@@ -92,6 +109,14 @@ export function SearchScreen() {
         {hasKeyword ? (
           <SearchResultList
             currentUser={currentUser}
+            messageSearchError={
+              keyword.trim().length >= 2 && messageSearch.error instanceof Error
+                ? messageSearch.error.message
+                : undefined
+            }
+            messageSearchLoading={
+              keyword.trim().length >= 2 && messageSearch.isPending
+            }
             onResultPress={handleResultPress}
             results={results}
             server={session}

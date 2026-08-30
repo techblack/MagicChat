@@ -1,6 +1,7 @@
 import type {
   ClientContacts,
   ClientConversation,
+  ClientMessageSearchResult,
   ClientProjectSummary,
   ContactApp,
   ContactGroup,
@@ -27,12 +28,18 @@ export type GlobalSearchResult =
       project: ClientProjectSummary
       type: "project"
     }
+  | {
+      key: string
+      message: ClientMessageSearchResult
+      type: "message"
+    }
 
 export function buildGlobalSearchResults({
   contacts,
   conversations,
   currentUserId,
   keyword,
+  messages = [],
   personalProject,
   projects,
 }: {
@@ -40,6 +47,7 @@ export function buildGlobalSearchResults({
   conversations: ClientConversation[]
   currentUserId: string | null
   keyword: string
+  messages?: ClientMessageSearchResult[]
   personalProject: ClientProjectSummary | null
   projects: ClientProjectSummary[]
 }): GlobalSearchResult[] {
@@ -97,7 +105,18 @@ export function buildGlobalSearchResults({
       type: "project",
     }))
 
-  return [...conversationResults, ...contactResults, ...projectResults]
+  const messageResults = messages.map((message) => ({
+    key: `message:${message.conversation.id}:${message.message.id}`,
+    message,
+    type: "message" as const,
+  }))
+
+  return [
+    ...conversationResults,
+    ...contactResults,
+    ...projectResults,
+    ...messageResults,
+  ]
 }
 
 function getConversationSearchValues({

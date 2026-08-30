@@ -3,6 +3,7 @@ import { SectionList, StyleSheet, Text, View } from "react-native"
 
 import { ContentState } from "@/components/feedback/content-state"
 import type {
+  ClientMessage,
   ClientUser,
   ContactApp,
   ContactGroup,
@@ -23,11 +24,15 @@ type SearchResultSection = {
 
 export function SearchResultList({
   currentUser,
+  messageSearchError,
+  messageSearchLoading,
   onResultPress,
   results,
   server,
 }: {
   currentUser: ClientUser | null
+  messageSearchError?: string
+  messageSearchLoading?: boolean
   onResultPress: (result: GlobalSearchResult) => void
   results: GlobalSearchResult[]
   server: ServerTarget
@@ -48,6 +53,10 @@ export function SearchResultList({
           data: results.filter((result) => result.type === "project"),
           title: "项目",
         },
+        {
+          data: results.filter((result) => result.type === "message"),
+          title: "聊天记录",
+        },
       ].filter((section) => section.data.length > 0),
     [results]
   )
@@ -62,7 +71,15 @@ export function SearchResultList({
       keyboardDismissMode="on-drag"
       keyboardShouldPersistTaps="handled"
       keyExtractor={(result) => result.key}
-      ListEmptyComponent={<ContentState message="没有匹配的结果" />}
+      ListEmptyComponent={
+        messageSearchLoading ? (
+          <ContentState loading message="正在搜索聊天记录" />
+        ) : messageSearchError ? (
+          <ContentState message={messageSearchError} tone="error" />
+        ) : (
+          <ContentState message="没有匹配的结果" />
+        )
+      }
       renderSectionHeader={({ section }) => (
         <View
           style={[
@@ -150,6 +167,44 @@ function SearchResultItem({
     )
   }
 
+  if (result.type === "message") {
+    const { conversation, message } = result.message
+    return (
+      <XGUIListItem
+        accessibilityLabel={`打开聊天记录 ${conversation.name}`}
+        description={`${result.message.senderName} · ${result.message.summary}`}
+        leading={
+          <ConversationAvatar
+            conversation={{
+              ...conversation,
+              announcement: "",
+              canSend: true,
+              createdAt: "",
+              lastMessageAt: null,
+              lastMessageId: null,
+              lastMessageSeq: 0,
+              lastMessageSender: null,
+              lastMessageSummary: "",
+              lastChoiceSeq: 0,
+              lastMentionedSeq: 0,
+              lastReadSeq: 0,
+              memberCount: 0,
+              notificationMuted: false,
+              pinned: false,
+              unreadCount: 0,
+              visibility: "private",
+            }}
+            server={server}
+            surroundingBackground="$color1"
+          />
+        }
+        onPress={onPress}
+        separator={separator}
+        title={message.body.type === "revoked" ? "已撤回消息" : messageBodyText(message)}
+      />
+    )
+  }
+
   return (
     <XGUIListItem
       accessibilityLabel={`项目 ${result.project.name}`}
@@ -163,8 +218,20 @@ function SearchResultItem({
       }
       separator={separator}
       title={result.project.name}
+      onPress={onPress}
     />
   )
+}
+
+function messageBodyText(message: ClientMessage): string {
+  const body = message.body
+  if ("content" in body) return body.content
+  if ("title" in body) return body.title
+  if (body.type === "file") return body.name
+  if (body.type === "image") return body.caption || "图片消息"
+  if (body.type === "voice") return body.transcript || "语音消息"
+  if (body.type === "forward_bundle") return `转发 ${body.itemCount} 条消息`
+  return "消息"
 }
 
 function getConversationSubtitle(conversation: {

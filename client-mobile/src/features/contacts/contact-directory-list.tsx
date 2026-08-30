@@ -197,11 +197,11 @@ export function ContactDirectoryList({
         onScrollToIndexFailed={handleScrollToIndexFailed}
         onViewableItemsChanged={handleViewableItemsChanged}
         removeClippedSubviews={false}
-        renderItem={({ item: row }) => (
+        renderItem={({ index, item: row }) => (
           <DirectoryListItem
             alphabetIndex={alphabetIndex}
             item={row.item}
-            last={false}
+            last={index === rows.length - 1}
             onPress={() => onItemPress(row.item)}
             server={server}
           />

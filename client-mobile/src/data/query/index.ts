@@ -5,11 +5,17 @@ import {
 } from "@tanstack/react-query"
 
 import { fetchAppInfo } from "@/data/auth/app-info-api"
-import { contactManager } from "@/data/contacts"
+import { contactManager, listFriendRequests } from "@/data/contacts"
 import { conversationManager } from "@/data/conversations/index"
 import { fetchCurrentUser } from "@/data/users/current-user-api"
 import type { ClientProjectPage } from "@/core/models"
-import { projectManager } from "@/data/projects"
+import {
+  listProjectDocuments,
+  listProjectMembers,
+  listProjectTasks,
+  projectManager,
+} from "@/data/projects"
+import { searchClientMessages } from "@/data/search"
 import { createAuthenticatedScopeKey, createServerKey } from "@/data/server-key"
 import type {
   AuthenticatedTarget,
@@ -67,8 +73,14 @@ export const queryKeys = {
     [...authenticatedQueryKey(target), "current-user"] as const,
   userProfiles: (target: AuthenticatedTarget) =>
     [...authenticatedQueryKey(target), "user-profiles"] as const,
+  friendRequests: (target: AuthenticatedTarget, direction: "incoming" | "outgoing") =>
+    [...authenticatedQueryKey(target), "friend-requests", direction] as const,
   projects: (target: AuthenticatedTarget) =>
     [...authenticatedQueryKey(target), "projects"] as const,
+  projectDetails: (target: AuthenticatedTarget, projectId: string) =>
+    [...authenticatedQueryKey(target), "project", projectId] as const,
+  messageSearch: (target: AuthenticatedTarget, keyword: string) =>
+    [...authenticatedQueryKey(target), "message-search", keyword] as const,
   avatarResource: (server: ServerTarget, sourceUrl: string) =>
     [...serverQueryKey(server), "resource", "avatar", sourceUrl] as const,
 }
@@ -111,6 +123,17 @@ export function currentUserQueryOptions(target: AuthenticatedTarget) {
   })
 }
 
+export function friendRequestsQueryOptions(
+  target: AuthenticatedTarget,
+  direction: "incoming" | "outgoing"
+) {
+  return queryOptions({
+    queryFn: ({ signal }) => listFriendRequests(target, direction, { signal }),
+    queryKey: queryKeys.friendRequests(target, direction),
+    staleTime: 30_000,
+  })
+}
+
 export function conversationsQueryOptions(target: AuthenticatedTarget) {
   return queryOptions({
     queryFn: () => conversationManager.list(target),
@@ -141,5 +164,35 @@ export function projectsQueryOptions(
       }),
     queryKey: queryKeys.projects(target),
     refetchInterval: options.refetchInterval,
+  })
+}
+
+export function projectDetailsQueryOptions(
+  target: AuthenticatedTarget,
+  projectId: string
+) {
+  return queryOptions({
+    queryFn: ({ signal }) =>
+      Promise.all([
+        listProjectTasks(target, projectId, { signal }),
+        listProjectDocuments(target, projectId, { signal }),
+        listProjectMembers(target, projectId, { signal }),
+      ]).then(([tasks, documents, members]) => ({ documents, members, tasks })),
+    queryKey: queryKeys.projectDetails(target, projectId),
+    staleTime: 15_000,
+  })
+}
+
+export function messageSearchQueryOptions(
+  target: AuthenticatedTarget,
+  keyword: string
+) {
+  const normalizedKeyword = keyword.trim()
+  return queryOptions({
+    enabled: normalizedKeyword.length >= 2,
+    queryFn: ({ signal }) =>
+      searchClientMessages(target, normalizedKeyword, { signal }),
+    queryKey: queryKeys.messageSearch(target, normalizedKeyword),
+    staleTime: 15_000,
   })
 }

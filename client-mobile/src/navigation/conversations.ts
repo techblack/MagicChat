@@ -19,9 +19,12 @@ export function buildCreateGroupConversationHref(
   } as unknown as Href
 }
 
-export function buildConversationHref(conversationId: string): Href {
+export function buildConversationHref(
+  conversationId: string,
+  messageId?: string
+): Href {
   return {
-    params: { conversationId },
+    params: { conversationId, ...(messageId ? { messageId } : {}) },
     pathname: "/(app)/conversation/[conversationId]",
   }
 }

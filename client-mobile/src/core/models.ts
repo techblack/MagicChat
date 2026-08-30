@@ -36,6 +36,22 @@ export type ContactUser = {
   type: "user"
 }
 
+export type FriendRequestStatus =
+  | "accepted"
+  | "canceled"
+  | "pending"
+  | "rejected"
+
+export type FriendRequest = {
+  addresseeUserId: string
+  createdAt: string
+  handledAt: string | null
+  id: string
+  requesterUserId: string
+  status: FriendRequestStatus
+  updatedAt: string
+}
+
 export type ResolvedClientUser = ContactUser & {
   updatedAt: string
 }
@@ -89,6 +105,39 @@ export type ClientProjectSummary = {
   isPersonal: boolean
   name: string
   updatedAt: string
+}
+
+export type ClientProjectTask = {
+  assigneeId?: string
+  assigneeName: string
+  description: string
+  dueDate: string | null
+  id: string
+  priority: number
+  startDate: string | null
+  status: "canceled" | "done" | "in_progress" | "todo"
+  title: string
+}
+
+export type ClientProjectDocument = {
+  documentType: "document" | "markdown" | null
+  id: string
+  kind: "document" | "folder"
+  parentId: string | null
+  title: string
+  updatedAt: string
+}
+
+export type ClientProjectMember = {
+  avatar: string
+  displayName: string
+  email: string
+  id: string
+  name: string
+  nickname: string
+  role: "member" | "owner"
+  sourceGroupIds: string[]
+  status: string
 }
 
 export type ClientProjectPage = {
@@ -480,6 +529,18 @@ export type ClientMessage = {
   sender: ClientMessageSender
   seq: number
   topic?: ClientMessageTopic
+}
+
+export type ClientMessageSearchResult = {
+  conversation: {
+    avatar: string
+    id: string
+    name: string
+    type: "app" | "direct" | "group" | "topic"
+  }
+  message: ClientMessage
+  senderName: string
+  summary: string
 }
 
 export type ClientTopicSourceMessage = {

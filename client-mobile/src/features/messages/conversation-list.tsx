@@ -24,6 +24,7 @@ import { ConversationAvatar } from "@/features/messages/conversation-avatar"
 import {
   findLatestUnreadConversationIndex,
   getBoundedConversationIds,
+  type ConversationFilter,
   type ConversationListItemModel,
 } from "@/features/messages/conversation-list-model"
 import { ConversationPreferenceIndicators } from "@/features/messages/conversation-preference-indicators"
@@ -39,6 +40,7 @@ const VISIBLE_CONVERSATION_HYDRATION_LIMIT = 30
 
 export function ConversationList({
   errorMessage,
+  filter,
   hasKeyword,
   items,
   onConversationDelete,
@@ -48,11 +50,13 @@ export function ConversationList({
   onConversationPress,
   onConversationPressIn,
   onConversationsVisible,
+  onFilterChange,
   onSearchPress,
   scrollToUnreadRequest = 0,
   server,
 }: {
   errorMessage?: string
+  filter: ConversationFilter
   hasKeyword: boolean
   items: ConversationListItemModel[]
   onConversationDelete: (item: ConversationListItemModel) => void
@@ -68,6 +72,7 @@ export function ConversationList({
   onConversationPress: (conversationId: string) => void
   onConversationPressIn: (conversationId: string) => void
   onConversationsVisible: (conversationIds: string[]) => void
+  onFilterChange: (filter: ConversationFilter) => void
   onSearchPress: () => void
   scrollToUnreadRequest?: number
   server: ServerTarget
@@ -119,7 +124,13 @@ export function ConversationList({
       keyboardShouldPersistTaps="handled"
       keyExtractor={(item) => item.conversation.id}
       ListEmptyComponent={
-        <ContentState message={hasKeyword ? "没有匹配的会话" : "暂无会话"} />
+        <ContentState
+          message={
+            hasKeyword
+              ? "没有匹配的会话"
+              : getConversationFilterEmptyMessage(filter)
+          }
+        />
       }
       ListFooterComponent={
         items.length > 0 ? (
@@ -131,6 +142,10 @@ export function ConversationList({
           <XGUIFilledSearchBar
             accessibilityLabel="搜索消息、联系人和项目"
             onPress={onSearchPress}
+          />
+          <ConversationFilterBar
+            onChange={onFilterChange}
+            value={filter}
           />
           <InlineError message={errorMessage} />
         </View>
@@ -152,10 +167,10 @@ export function ConversationList({
       }}
       onViewableItemsChanged={onViewableItemsChangedRef.current}
       ref={listRef}
-      renderItem={({ item }) => (
+      renderItem={({ index, item }) => (
         <ConversationListItem
           item={item}
-          last={false}
+          last={index === items.length - 1}
           onDelete={() => onConversationDelete(item)}
           onLongPress={() => onConversationLongPress(item)}
           onMutedChange={(muted) => onConversationMutedChange(item, muted)}
@@ -186,6 +201,72 @@ export function ConversationList({
       style={styles.list}
     />}
     </ElasticOverscroll>
+  )
+}
+
+const CONVERSATION_FILTERS: readonly {
+  label: string
+  value: ConversationFilter
+}[] = [
+  { label: "全部", value: "all" },
+  { label: "未读", value: "unread" },
+  { label: "单聊", value: "direct" },
+  { label: "群聊", value: "group" },
+]
+
+function getConversationFilterEmptyMessage(filter: ConversationFilter) {
+  if (filter === "unread") return "暂无未读会话"
+  if (filter === "direct") return "暂无单聊会话"
+  if (filter === "group") return "暂无群聊会话"
+  return "暂无会话"
+}
+
+function ConversationFilterBar({
+  onChange,
+  value,
+}: {
+  onChange: (filter: ConversationFilter) => void
+  value: ConversationFilter
+}) {
+  const { colors } = useXGUITheme()
+  return (
+    <View
+      accessibilityLabel="会话类型"
+      accessibilityRole="tablist"
+      style={[styles.filterBar, { backgroundColor: colors.background0 }]}
+    >
+      {CONVERSATION_FILTERS.map((filter) => {
+        const active = filter.value === value
+        return (
+          <Pressable
+            accessibilityLabel={filter.label}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: active }}
+            key={filter.value}
+            onPress={() => onChange(filter.value)}
+            style={({ pressed }) => [
+              styles.filterItem,
+              {
+                backgroundColor: active
+                  ? colors.background2
+                  : pressed
+                    ? colors.background1
+                    : "transparent",
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.filterLabel,
+                { color: active ? colors.brand : colors.textSecondary },
+              ]}
+            >
+              {filter.label}
+            </Text>
+          </Pressable>
+        )
+      })}
+    </View>
   )
 }
 
@@ -432,6 +513,25 @@ const styles = StyleSheet.create({
   },
   actions: {
     flexDirection: "row",
+  },
+  filterBar: {
+    flexDirection: "row",
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  filterItem: {
+    alignItems: "center",
+    borderRadius: 7,
+    flex: 1,
+    minHeight: 32,
+    justifyContent: "center",
+    paddingHorizontal: 8,
+  },
+  filterLabel: {
+    fontSize: 13,
+    fontWeight: "500",
+    lineHeight: 18,
   },
   avatar: {
     alignItems: "center",
