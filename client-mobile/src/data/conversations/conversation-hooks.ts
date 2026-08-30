@@ -11,7 +11,6 @@ import {
   dissolveGroupConversation as dissolveGroupConversationRequest,
   joinGroupConversation,
   leaveGroupConversation as leaveGroupConversationRequest,
-  removeGroupConversationMember as removeGroupConversationMemberRequest,
   openAppConversation,
   openDirectConversation,
   setConversationMuted as setConversationMutedRequest,
@@ -184,32 +183,6 @@ export function useAddGroupConversationMembers(target: AuthenticatedTarget) {
         target,
         input.conversationId,
         input.memberIds
-      ),
-    onMutate: () => ({ startedAt: conversationManager.beginOperation(target) }),
-    onSuccess: (conversation, _input, context) =>
-      updateGroupConversationCache(
-        queryClient,
-        target,
-        conversation,
-        context?.startedAt
-      ),
-  })
-}
-
-export function useRemoveGroupConversationMember(target: AuthenticatedTarget) {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: (input: {
-      conversationId: string
-      memberId: string
-      memberType?: "user" | "app"
-    }) =>
-      removeGroupConversationMemberRequest(
-        target,
-        input.conversationId,
-        input.memberId,
-        input.memberType
       ),
     onMutate: () => ({ startedAt: conversationManager.beginOperation(target) }),
     onSuccess: (conversation, _input, context) =>

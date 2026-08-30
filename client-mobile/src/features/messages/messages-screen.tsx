@@ -27,7 +27,6 @@ import { ConversationList } from "@/features/messages/conversation-list"
 import {
   buildConversationListItems,
   collectLatestConversationMessages,
-  type ConversationFilter,
   type ConversationListItemModel,
 } from "@/features/messages/conversation-list-model"
 import { DismissConversationActionSheet } from "@/features/messages/dismiss-conversation-dialog"
@@ -84,8 +83,6 @@ export function MessagesScreen() {
   const [actionSheetOpen, setActionSheetOpen] = useState(false)
   const [dismissCandidate, setDismissCandidate] =
     useState<ClientConversation | null>(null)
-  const [conversationFilter, setConversationFilter] =
-    useState<ConversationFilter>("all")
   const [scrollToUnreadRequest, setScrollToUnreadRequest] = useState(0)
   const [listNow, setListNow] = useState(() => new Date())
   const {
@@ -135,20 +132,11 @@ export function MessagesScreen() {
         contacts,
         conversations,
         currentUserId: currentUser?.id ?? session.userId,
-        filter: conversationFilter,
         keyword: "",
         latestMessages,
         now: listNow,
       }),
-    [
-      contacts,
-      conversationFilter,
-      conversations,
-      currentUser?.id,
-      latestMessages,
-      listNow,
-      session.userId,
-    ]
+    [contacts, conversations, currentUser?.id, latestMessages, listNow, session.userId]
   )
 
   useEffect(() => {
@@ -318,7 +306,6 @@ export function MessagesScreen() {
         scrollable={false}
       >
         <ConversationList
-          filter={conversationFilter}
           hasKeyword={false}
           items={items}
           onConversationDelete={handleRequestDismiss}
@@ -332,7 +319,6 @@ export function MessagesScreen() {
           onConversationPress={handleConversationPress}
           onConversationPressIn={handleConversationPressIn}
           onConversationsVisible={handleConversationsVisible}
-          onFilterChange={setConversationFilter}
           onSearchPress={() => router.push("/search")}
           scrollToUnreadRequest={scrollToUnreadRequest}
           server={session}

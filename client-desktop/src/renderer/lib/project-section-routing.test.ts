@@ -18,9 +18,9 @@ describe("项目 section 路由", () => {
     )
   })
 
-  it("将旧 topics 地址回退到 tasks 并保留查询参数", () => {
+  it("将旧 topics 地址兼容到 discussions 并保留查询参数", () => {
     expect(normalizeProjectSectionPath("project-1", "topics", "?source=legacy")).toBe(
-      "/projects/project-1/tasks?source=legacy",
+      "/projects/project-1/discussions?source=legacy",
     )
   })
 

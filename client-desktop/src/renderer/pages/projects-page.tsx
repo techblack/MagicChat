@@ -11,6 +11,7 @@ import { ProjectGoalsTab } from "@/components/projects/project-goals-tab"
 import { ProjectMembersTab } from "@/components/projects/project-members-tab"
 import { ProjectSettingsMenu } from "@/components/projects/project-settings-menu"
 import { ProjectTasksTab } from "@/components/projects/project-tasks-tab"
+import { ProjectTopicsTab } from "@/components/projects/project-topics-tab"
 import { GroupAvatar } from "@/components/group-avatar"
 import {
   Avatar,
@@ -50,7 +51,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { ClientConversation, ClientUser } from "@/lib/client-data-api"
 import { useClientData } from "@/lib/client-data-context"
 import { formatActivityTime } from "@/lib/activity-time"
-import { filterProjectGroups, filterProjectSummaries } from "@/lib/project-search"
 import {
   getClientProject,
   type ClientProjectDetail,
@@ -94,8 +94,19 @@ export function ProjectsPage() {
     () => conversations.filter((conversation) => conversation.type === "group"),
     [conversations],
   )
-  const visiblePersonalWorkspace = filterProjectSummaries([personalProject], keyword).length > 0
-  const visibleProjects = filterProjectSummaries(projects, keyword)
+  const normalizedKeyword = keyword.trim().toLowerCase()
+  const visiblePersonalWorkspace = normalizedKeyword
+    ? [personalProject.name, personalProject.description].some((value) =>
+        value.toLowerCase().includes(normalizedKeyword),
+      )
+    : true
+  const visibleProjects = normalizedKeyword
+    ? projects.filter((project) =>
+        [project.name, project.description].some((value) =>
+          value.toLowerCase().includes(normalizedKeyword),
+        ),
+      )
+    : projects
   const activeSection: ProjectSection = isProjectSection(section) ? section : "tasks"
   const linkedTaskId = projectId ? new URLSearchParams(location.search).get("taskId")?.trim() : ""
 
@@ -197,7 +208,7 @@ export function ProjectsPage() {
               没有匹配的项目
             </div>
           )}
-          {projectsNextCursor && !keyword.trim() && (
+          {projectsNextCursor && !normalizedKeyword && (
             <div className="px-3 py-2">
               <Button
                 className="w-full"
@@ -507,6 +518,9 @@ function ProjectPanel({
         <TabsContent className="flex min-h-0 flex-1 overflow-hidden" value="goals">
           <ProjectGoalsTab />
         </TabsContent>
+        <TabsContent className="flex min-h-0 flex-1 overflow-hidden" value="discussions">
+          <ProjectTopicsTab />
+        </TabsContent>
         <TabsContent className="flex min-h-0 flex-1 overflow-hidden" value="documents">
           <ProjectDocumentsTab key={project.id} projectId={project.id} />
         </TabsContent>
@@ -542,7 +556,13 @@ function CreateProjectDialog({
   }
 
   const filteredGroups = React.useMemo(() => {
-    return filterProjectGroups(groups, groupKeyword)
+    const keyword = groupKeyword.trim().toLowerCase()
+
+    if (!keyword) {
+      return groups
+    }
+
+    return groups.filter((group) => group.name.toLowerCase().includes(keyword))
   }, [groupKeyword, groups])
   const trimmedName = name.trim()
   const canCreate = trimmedName.length > 0 && !creating
@@ -698,6 +718,7 @@ function ProjectNavigation({ projectId }: { projectId: string }) {
   const items: ReadonlyArray<Readonly<{ label: string; value: ProjectSection }>> = [
     { value: "tasks", label: "任务" },
     { value: "goals", label: "目标" },
+    { value: "discussions", label: "讨论" },
     { value: "documents", label: "文档" },
     { value: "members", label: "成员" },
   ]

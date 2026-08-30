@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from "expo-router"
+import { useRouter } from "expo-router"
 import { useMemo } from "react"
 import { View } from "react-native"
 
@@ -10,17 +10,10 @@ import { ProjectList } from "@/features/projects/project-list"
 import { buildProjectListSections } from "@/features/projects/project-list-model"
 import { useXGUITheme } from "@/xgui"
 import { useClientProjects, useClientSession } from "@/providers/client-data-provider"
-import { buildProjectHref, type ProjectSection } from "@/navigation/projects"
 
 export function ProjectsScreen() {
   const { colors } = useXGUITheme()
   const router = useRouter()
-  const params = useLocalSearchParams<{ section?: string | string[] }>()
-  const requestedSection = Array.isArray(params.section) ? params.section[0] : params.section
-  const section: ProjectSection | undefined =
-    requestedSection === "calendar" || requestedSection === "documents" || requestedSection === "goals" || requestedSection === "members" || requestedSection === "tasks"
-      ? requestedSection
-      : undefined
   const session = useAuthenticatedSession()
   const { currentUser } = useClientSession()
   const {
@@ -68,7 +61,6 @@ export function ProjectsScreen() {
             isRefreshing={isProjectsRefreshing}
             onLoadMore={handleLoadMore}
             onRefresh={handleRefresh}
-            onProjectPress={(project) => router.push(buildProjectHref(project.id, section))}
             sections={sections}
             server={session}
           />

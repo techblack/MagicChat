@@ -1,6 +1,5 @@
 import { useRouter, type Href } from "expo-router"
 import { useMemo } from "react"
-import { useQuery } from "@tanstack/react-query"
 
 import { KeyboardAwareScreen } from "@/components/layout/keyboard-aware-screen"
 import {
@@ -16,7 +15,6 @@ import {
 import { buildEntityDetailHref } from "@/navigation/entity-details"
 import { useAuthenticatedSession } from "@/providers/auth-provider"
 import { useClientContacts } from "@/providers/client-data-provider"
-import { friendRequestsQueryOptions } from "@/data/query"
 import { useXGUITheme } from "@/xgui"
 
 export function ContactsScreen() {
@@ -27,12 +25,6 @@ export function ContactsScreen() {
     contacts,
     contactsError,
   } = useClientContacts()
-  const incomingRequests = useQuery(
-    friendRequestsQueryOptions(session, "incoming")
-  )
-  const pendingRequestCount =
-    incomingRequests.data?.filter((request) => request.status === "pending")
-      .length ?? 0
   const sections = useMemo(
     () =>
       buildDirectorySections({
@@ -47,7 +39,7 @@ export function ContactsScreen() {
     () => [
       {
         category: "new-friends",
-        count: pendingRequestCount,
+        count: 0,
         label: "新朋友",
       },
       {
@@ -77,7 +69,7 @@ export function ContactsScreen() {
         label: "公开群组",
       },
     ],
-    [contacts.apps, contacts.groups, pendingRequestCount, session.userId]
+    [contacts.apps, contacts.groups, session.userId]
   )
 
   function handleItemPress(item: DirectoryItem) {

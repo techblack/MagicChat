@@ -17,7 +17,7 @@ import { PixelRatio, Pressable, StyleSheet, Text, View } from "react-native"
 
 import { KeyboardAwareScreen } from "@/components/layout/keyboard-aware-screen"
 import type { XGUIColors } from "@/xgui/theme/colors"
-import { useXGUITheme } from "@/xgui"
+import { useXGUITheme, useXGUIToast } from "@/xgui"
 
 type OfficeEntryKey = "calendar" | "documents" | "goals" | "projects" | "tasks"
 
@@ -42,6 +42,7 @@ const OFFICE_ROW_HEIGHT = PixelRatio.roundToNearestPixel(60)
 
 export function OfficeScreen() {
   const router = useRouter()
+  const toast = useXGUIToast()
   const { colors } = useXGUITheme()
 
   function handleEntryPress(key: OfficeEntryKey) {
@@ -49,10 +50,13 @@ export function OfficeScreen() {
       router.push("/office/projects" as Href)
       return
     }
-    router.push({
-      pathname: "/office/projects",
-      params: { section: key },
-    } as unknown as Href)
+
+    toast.show({
+      duration: 1_000,
+      message: "暂不支持查看",
+      modal: false,
+      type: "text",
+    })
   }
 
   return (

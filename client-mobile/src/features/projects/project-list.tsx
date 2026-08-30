@@ -17,7 +17,7 @@ import type { ServerTarget } from "@/core/server-target"
 import { formatActivityTime } from "@/domain/time/activity-time"
 import { ProjectAvatar } from "@/features/projects/project-avatar"
 import type { ProjectListSection } from "@/features/projects/project-list-model"
-import { XGUILoadingIcon, useXGUITheme } from "@/xgui"
+import { XGUILoadingIcon, useXGUITheme, useXGUIToast } from "@/xgui"
 
 export function ProjectList({
   currentUser,
@@ -28,7 +28,6 @@ export function ProjectList({
   isRefreshing,
   onLoadMore,
   onRefresh,
-  onProjectPress,
   sections,
   server,
 }: {
@@ -40,12 +39,12 @@ export function ProjectList({
   isRefreshing: boolean
   onLoadMore: () => void
   onRefresh: () => void
-  onProjectPress: (project: ClientProjectSummary) => void
   sections: ProjectListSection[]
   server: ServerTarget
 }) {
   const theme = useTheme()
   const { colors } = useXGUITheme()
+  const toast = useXGUIToast()
   const projects = useMemo(
     () => sections.flatMap((section) => section.data),
     [sections]
@@ -99,7 +98,14 @@ export function ProjectList({
         <ProjectListItem
           currentUser={currentUser}
           last={index === projects.length - 1}
-          onPress={() => onProjectPress(item)}
+          onPress={() => {
+            toast.show({
+              duration: 1_000,
+              message: "暂不支持查看",
+              modal: false,
+              type: "text",
+            })
+          }}
           project={item}
           server={server}
         />

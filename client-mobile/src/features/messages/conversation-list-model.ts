@@ -18,8 +18,6 @@ export type ConversationListItemModel = {
   unreadAlertLabel: "[选择]" | "[有人 @ 我]" | null
 }
 
-export type ConversationFilter = "all" | "unread" | "direct" | "group"
-
 export function collectLatestConversationMessages(
   entries: readonly {
     conversationId: string
@@ -45,7 +43,6 @@ export function buildConversationListItems({
   contacts,
   conversations,
   currentUserId,
-  filter = "all",
   keyword,
   latestMessages = new Map(),
   now = new Date(),
@@ -54,7 +51,6 @@ export function buildConversationListItems({
   contacts: ClientContacts
   conversations: ClientConversation[]
   currentUserId: string
-  filter?: ConversationFilter
   keyword: string
   latestMessages?: ReadonlyMap<string, ClientMessage>
   now?: Date
@@ -64,7 +60,6 @@ export function buildConversationListItems({
   const rows = getConversationListRows({
     activeConversationId,
     conversations,
-    filter,
     now: now.getTime(),
   })
 
@@ -121,12 +116,10 @@ export function buildConversationListItems({
 function getConversationListRows({
   activeConversationId,
   conversations,
-  filter,
   now,
 }: {
   activeConversationId?: string
   conversations: ClientConversation[]
-  filter: ConversationFilter
   now: number
 }) {
   const orderedConversations = flattenVisibleConversations(conversations, {
@@ -166,31 +159,9 @@ function getConversationListRows({
     }
 
     const pinnedBackground = conversation.pinned
-    const topics = topicsByParentId.get(conversation.id) ?? []
-    if (filter === "unread") {
-      const unreadTopics = topics.filter(hasUnreadMessages)
-      if (!hasUnreadMessages(conversation) && unreadTopics.length === 0) {
-        continue
-      }
-      rows.push({ conversation, nested: false, pinnedBackground })
-      rows.push(
-        ...unreadTopics.map((topic) => ({
-          conversation: topic,
-          nested: true,
-          pinnedBackground,
-        }))
-      )
-      continue
-    }
-
-    const matchesFilter =
-      filter === "all" ||
-      conversation.type === filter ||
-      (filter === "direct" && conversation.type === "app")
-    if (!matchesFilter) continue
     rows.push({ conversation, nested: false, pinnedBackground })
     rows.push(
-      ...topics.map((topic) => ({
+      ...(topicsByParentId.get(conversation.id) ?? []).map((topic) => ({
         conversation: topic,
         nested: true,
         pinnedBackground,
@@ -199,13 +170,6 @@ function getConversationListRows({
   }
 
   return rows
-}
-
-function hasUnreadMessages(conversation: ClientConversation) {
-  return (
-    conversation.unreadCount > 0 ||
-    conversation.lastMessageSeq > conversation.lastReadSeq
-  )
 }
 
 export function getBoundedConversationIds(

@@ -32,7 +32,6 @@ export default function AppStackLayout() {
       <Stack.Screen name="entity/[entityType]/[entityId]" />
       <Stack.Screen name="contacts/[category]" />
       <Stack.Screen name="office/projects" />
-      <Stack.Screen name="office/projects/[projectId]" />
       <Stack.Screen name="search" />
       <Stack.Screen name="profile" />
       <Stack.Screen name="profile-nickname" />

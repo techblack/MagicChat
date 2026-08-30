@@ -1,4 +1,4 @@
-export const projectSections = ["tasks", "goals", "documents", "members"] as const
+export const projectSections = ["tasks", "goals", "discussions", "documents", "members"] as const
 export type ProjectSection = (typeof projectSections)[number]
 
 export function isProjectSection(value: string | undefined): value is ProjectSection {
@@ -19,5 +19,10 @@ export function normalizeProjectSectionPath(
   section: string | undefined,
   search = "",
 ): string {
-  return projectSectionPath(projectId, isProjectSection(section) ? section : "tasks", search)
+  const normalizedSection = section === "topics" ? "discussions" : section
+  return projectSectionPath(
+    projectId,
+    isProjectSection(normalizedSection) ? normalizedSection : "tasks",
+    search,
+  )
 }

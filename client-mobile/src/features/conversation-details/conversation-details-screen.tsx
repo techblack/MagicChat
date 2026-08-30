@@ -20,7 +20,6 @@ import { ApiRequestError } from "@/data/api-client"
 import {
   useDissolveGroupConversation,
   useLeaveGroupConversation,
-  useRemoveGroupConversationMember,
   useSetConversationMuted,
   useSetConversationPinned,
 } from "@/data/conversations/conversation-hooks"
@@ -118,12 +117,8 @@ export function ConversationDetailsScreen() {
     session,
     conversationId
   )
-  const removeMemberMutation = useRemoveGroupConversationMember(session)
   const [groupActionSheetOpen, setGroupActionSheetOpen] = useState(false)
   const [topicArchiveDialogOpen, setTopicArchiveDialogOpen] = useState(false)
-  const [removeMemberSheetOpen, setRemoveMemberSheetOpen] = useState(false)
-  const [removeMemberTarget, setRemoveMemberTarget] =
-    useState<ClientConversationMember>()
 
   const currentMember = conversation?.members?.find(
     (member) =>
@@ -145,12 +140,6 @@ export function ConversationDetailsScreen() {
             member.type === "user" && !idsMatch(member.id, session.userId)
         )?.id
       : undefined
-  const removableMembers = (conversation?.members ?? []).filter(
-    (member) =>
-      canManageGroup &&
-      member.role !== "owner" &&
-      !(member.type === "user" && idsMatch(member.id, session.userId))
-  )
 
   if (!conversation) {
     const loading = !isReady || (expectsTopic && topicQuery.isPending)
@@ -277,11 +266,6 @@ export function ConversationDetailsScreen() {
                         buildCreateGroupConversationHref([directContactId])
                       )
                   : undefined
-            }
-            onRemovePress={
-              removableMembers.length > 0
-                ? () => setRemoveMemberSheetOpen(true)
-                : undefined
             }
             onMemberPress={openMemberProfile}
           />
@@ -430,63 +414,6 @@ export function ConversationDetailsScreen() {
         open={topicArchiveDialogOpen}
         saving={archiveTopicMutation.isPending}
       />
-
-      <XGUIActionSheet
-        actions={removableMembers.map((member) => ({
-          deferUntilClosed: true,
-          label: `移出${member.nickname.trim() || member.name.trim() || "该成员"}`,
-          onPress: () => {
-            setRemoveMemberTarget(member)
-            setRemoveMemberSheetOpen(false)
-          },
-        }))}
-        onOpenChange={setRemoveMemberSheetOpen}
-        open={removeMemberSheetOpen}
-        title="选择要移出的成员"
-      />
-      <XGUIActionSheet
-        actions={
-          removeMemberTarget
-            ? [
-                {
-                  closeOnPress: false,
-                  destructive: true,
-                  disabled: removeMemberMutation.isPending,
-                  label: removeMemberMutation.isPending ? "移出中…" : "确认移出",
-                  onPress: () => {
-                    const target = removeMemberTarget
-                    if (!target) return
-                    void removeMemberMutation
-                      .mutateAsync({
-                        conversationId,
-                        memberId: target.id,
-                        memberType: target.type,
-                      })
-                      .then(() => {
-                        setRemoveMemberTarget(undefined)
-                        toast.show({ message: "已移出群聊成员", type: "success" })
-                      })
-                      .catch((error: unknown) =>
-                        showError(error, "移出群聊成员失败")
-                      )
-                  },
-                },
-              ]
-            : []
-        }
-        cancelDisabled={removeMemberMutation.isPending}
-        onOpenChange={(open) => {
-          if (!open && !removeMemberMutation.isPending) {
-            setRemoveMemberTarget(undefined)
-          }
-        }}
-        open={removeMemberTarget !== undefined}
-        title={
-          removeMemberTarget
-            ? `确认移出${removeMemberTarget.nickname.trim() || removeMemberTarget.name.trim() || "该成员"}？`
-            : undefined
-        }
-      />
     </View>
   )
 }
@@ -495,13 +422,11 @@ function ContactArea({
   conversation,
   currentUserId,
   onAddPress,
-  onRemovePress,
   onMemberPress,
 }: {
   conversation: ClientConversation
   currentUserId: string
   onAddPress?: () => void
-  onRemovePress?: () => void
   onMemberPress: (member: ClientConversationMember) => void
 }) {
   const { colors } = useXGUITheme()
@@ -559,12 +484,8 @@ function ContactArea({
           label="添加"
           onPress={onAddPress}
         />
-        {canRemoveGroupMembers && onRemovePress ? (
-          <PlaceholderMemberTile
-            icon="minus"
-            label="移除"
-            onPress={onRemovePress}
-          />
+        {canRemoveGroupMembers ? (
+          <PlaceholderMemberTile icon="minus" label="移除" />
         ) : null}
       </View>
     </View>

@@ -88,10 +88,6 @@ type ConversationActionResponse = {
   conversation?: ConversationResponse
 }
 
-type GroupConversationActionResponse = {
-  conversation_id?: string
-}
-
 type ConversationCreateTopicResponse = ConversationActionResponse & {
   created?: boolean
 }
@@ -107,6 +103,10 @@ type ConversationMuteResponse = {
 }
 
 type ConversationDismissResponse = {
+  conversation_id?: string
+}
+
+type GroupConversationActionResponse = {
   conversation_id?: string
 }
 
@@ -294,29 +294,6 @@ export async function addGroupConversationMembers(
   )
 
   return normalizeConversationAction(data, "添加群成员响应格式不正确")
-}
-
-export async function removeGroupConversationMember(
-  target: AuthenticatedTarget,
-  conversationId: string,
-  memberId: string,
-  memberType: "user" | "app" = "user",
-  options: ConversationRequestOptions = {}
-) {
-  const suffix =
-    memberType === "user"
-      ? encodeURIComponent(memberId)
-      : `${encodeURIComponent(memberType)}/${encodeURIComponent(memberId)}`
-  const data = await createProtectedApiClient(target, options.fetcher).request<ConversationActionResponse>(
-    `/api/client/conversations/groups/${encodeURIComponent(conversationId)}/members/${suffix}`,
-    {
-      errorMessage: "移出群聊成员失败",
-      method: "DELETE",
-      signal: options.signal,
-    }
-  )
-
-  return normalizeConversationAction(data, "移出群聊成员响应格式不正确")
 }
 
 export async function createGroupConversation(
