@@ -66,7 +66,10 @@ class _MagicChatAppState extends State<MagicChatApp> {
     final prefs = await SharedPreferences.getInstance();
     final token = await const SessionStore().readToken();
     await prefs.setString('magicchat.server_url', server);
-    if (!mounted || token == null) return;
+    if (!mounted) return;
+    if (token == null || token.isEmpty) {
+      throw const FormatException('登录响应缺少会话凭据，请重试');
+    }
     await const SessionStore().saveAccount(StoredAccount(
         id: '$server|$email', serverUrl: server, token: token, email: email));
     setState(() => _repository =
@@ -86,7 +89,10 @@ class _MagicChatAppState extends State<MagicChatApp> {
     final prefs = await SharedPreferences.getInstance();
     final token = await const SessionStore().readToken();
     await prefs.setString('magicchat.server_url', server);
-    if (!mounted || token == null) return;
+    if (!mounted) return;
+    if (token == null || token.isEmpty) {
+      throw const FormatException('登录响应缺少会话凭据，请重试');
+    }
     await const SessionStore().saveAccount(StoredAccount(
         id: '$server|$email', serverUrl: server, token: token, email: email));
     setState(() {

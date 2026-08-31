@@ -46,7 +46,11 @@ class SessionStore {
 
   Future<String?> readToken() async {
     try {
-      return await _storage.read(key: 'magicchat.session.token');
+      // Some desktop keychain implementations can report a successful write
+      // but return no value until the keychain is unlocked. Keep the
+      // in-process token available so a just-completed login can proceed.
+      return await _storage.read(key: 'magicchat.session.token') ??
+          _fallbackToken;
     } on PlatformException {
       return _fallbackToken;
     }

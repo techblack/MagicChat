@@ -17,7 +17,7 @@ class AuthService {
     final response = await _client.get(base.resolve('api/client/info'),
         headers: {'Accept': 'application/json'}).timeout(requestTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('读取服务器登录能力失败（HTTP ${response.statusCode}）');
+      throw Exception(_errorMessage(response, '读取服务器登录能力失败'));
     }
     final decoded = jsonDecode(response.body);
     final data = decoded is Map<String, dynamic> ? decoded['data'] : null;
@@ -60,10 +60,10 @@ class AuthService {
               'Accept': 'application/json',
               'Content-Type': 'application/json'
             },
-            body: jsonEncode({'email': email}))
+            body: jsonEncode({'email': email.trim()}))
         .timeout(requestTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('验证码发送失败（HTTP ${response.statusCode}）');
+      throw Exception(_errorMessage(response, '验证码发送失败'));
     }
   }
 
@@ -79,10 +79,10 @@ class AuthService {
               'Content-Type': 'application/json',
               'X-Dianbao-Mobile-Session': '1'
             },
-            body: jsonEncode({'email': email, 'code': code}))
+            body: jsonEncode({'email': email.trim(), 'code': code.trim()}))
         .timeout(requestTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('验证码登录失败（HTTP ${response.statusCode}）');
+      throw Exception(_errorMessage(response, '验证码登录失败'));
     }
     final decoded = jsonDecode(response.body);
     final data = decoded is Map<String, dynamic> ? decoded['data'] : null;
@@ -108,12 +108,13 @@ class AuthService {
         .post(base.resolve('api/client/auth/login'),
             headers: {
               'Accept': 'application/json',
-              'Content-Type': 'application/json'
+              'Content-Type': 'application/json',
+              'X-Dianbao-Mobile-Session': '1'
             },
             body: jsonEncode({'email': email, 'password': password}))
         .timeout(requestTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('登录失败（HTTP ${response.statusCode}）');
+      throw Exception(_errorMessage(response, '登录失败'));
     }
     final decoded = jsonDecode(response.body);
     final data = decoded is Map<String, dynamic> ? decoded['data'] : null;
@@ -128,6 +129,18 @@ class AuthService {
       throw const FormatException('登录响应缺少会话凭据');
     }
     await _sessions.writeToken(token);
+  }
+
+  String _errorMessage(http.Response response, String fallback) {
+    try {
+      final decoded = jsonDecode(response.body);
+      final error = decoded is Map<String, dynamic> ? decoded['error'] : null;
+      final message = error is Map<String, dynamic> ? error['message'] : null;
+      if (message is String && message.trim().isNotEmpty) return message;
+    } catch (_) {
+      // Keep a stable status-based message for non-JSON proxy responses.
+    }
+    return '$fallback（HTTP ${response.statusCode}）';
   }
 
   Future<void> logout({required String serverUrl}) async {
