@@ -15,6 +15,29 @@ class RealtimeStore extends ChangeNotifier {
     currentUserId = id;
   }
 
+  void markConversationRead(ConversationReadResult result) {
+    final current = conversations[result.conversationId];
+    if (current == null) return;
+    conversations[result.conversationId] = ChatConversation(
+        id: current.id,
+        title: current.title,
+        preview: current.preview,
+        announcement: current.announcement,
+        isPublic: current.isPublic,
+        avatar: current.avatar,
+        unread: result.unreadCount,
+        pinned: current.pinned,
+        muted: current.muted,
+        lastMessageSeq: current.lastMessageSeq,
+        lastReadSeq: result.lastReadSeq,
+        lastMentionedSeq: current.lastMentionedSeq,
+        lastChoiceSeq: current.lastChoiceSeq,
+        members: current.members,
+        canSend: current.canSend,
+        topic: current.topic);
+    notifyListeners();
+  }
+
   void apply(Map<String, dynamic> envelope) {
     final value = envelope['cursor'];
     if (value is num && value.toInt() <= cursor) return;
@@ -29,12 +52,21 @@ class RealtimeStore extends ChangeNotifier {
         _upsertMessage(payload);
       case 'message.reactions_updated':
         _patchReactions(payload);
+      case 'message.choice_updated':
+        _patchChoice(payload);
       case 'conversation.removed':
         final id = payload['conversation_id'];
         if (id is String) conversations.remove(id);
       case 'conversation.pin_updated':
       case 'conversation.mute_updated':
         _patchConversation(payload);
+      case 'conversation.member_mentioned':
+      case 'conversation.member_choice_received':
+        _patchConversationReminder(payload, event);
+      case 'topic.created':
+      case 'topic.participated':
+      case 'topic.archived':
+        _patchTopic(payload, event);
       case 'user.presence.updated':
         _patchPresence(payload);
     }
@@ -52,7 +84,14 @@ class RealtimeStore extends ChangeNotifier {
           name: current.name,
           online: online,
           type: current.type,
-          role: current.role);
+          role: current.role,
+          nickname: current.nickname,
+          email: current.email,
+          phone: current.phone,
+          avatar: current.avatar,
+          joined: current.joined,
+          memberCount: current.memberCount,
+          visibility: current.visibility);
     }
   }
 
@@ -60,7 +99,7 @@ class RealtimeStore extends ChangeNotifier {
     final id = payload['message_id'];
     if (id is! String) return;
     final current = messages[id];
-    if (current == null) return;
+    if (current == null || current.contentType == 'revoked') return;
     final actorText = payload['actor_text'];
     final actorReacted = payload['actor_reacted'] == true;
     final actorUserId = payload['actor_user_id'];
@@ -70,11 +109,16 @@ class RealtimeStore extends ChangeNotifier {
         id: current.id,
         text: current.text,
         author: current.author,
+        authorId: current.authorId,
         conversationId: current.conversationId,
         sequence: current.sequence,
         contentType: current.contentType,
         rawBody: current.rawBody,
         mine: current.mine,
+        choice: current.choice,
+        replyTo: current.replyTo,
+        topic: current.topic,
+        editableText: current.editableText,
         reactions: reactions
             .whereType<Map<String, dynamic>>()
             .where((item) => item['text'] is String)
@@ -83,9 +127,45 @@ class RealtimeStore extends ChangeNotifier {
                 count: (item['count'] as num?)?.toInt() ?? 0,
                 reactedByMe: actorUserId == currentUserId &&
                     actorReacted &&
-                    actorText == item['text']))
+                    actorText == item['text'],
+                users: _reactionUsers(item['users'])))
             .where((reaction) => reaction.count > 0)
             .toList());
+  }
+
+  void _patchChoice(Map<String, dynamic> payload) {
+    final id = payload['message_id'];
+    if (id is! String) return;
+    final current = messages[id];
+    if (current == null || current.contentType != 'choice') return;
+    final choice = parseMessageChoiceState(payload['choice']);
+    if (choice == null) return;
+    final actorId = payload['actor_user_id'];
+    final actorOptionIds = payload['actor_option_ids'];
+    final myOptionIds = actorId == currentUserId && actorOptionIds is List
+        ? actorOptionIds
+            .whereType<String>()
+            .where((id) => id.isNotEmpty)
+            .toList(growable: false)
+        : current.choice?.myOptionIds ?? choice.myOptionIds;
+    messages[id] = ChatMessage(
+        id: current.id,
+        text: current.text,
+        author: current.author,
+        authorId: current.authorId,
+        conversationId: current.conversationId,
+        sequence: current.sequence,
+        contentType: current.contentType,
+        rawBody: current.rawBody,
+        mine: current.mine,
+        choice: MessageChoiceState(
+            myOptionIds: myOptionIds,
+            options: choice.options,
+            responseCount: choice.responseCount),
+        replyTo: current.replyTo,
+        topic: current.topic,
+        editableText: current.editableText,
+        reactions: current.reactions);
   }
 
   void _upsertMessage(Map<String, dynamic> payload) {
@@ -93,21 +173,85 @@ class RealtimeStore extends ChangeNotifier {
     if (nested is Map<String, dynamic>) payload = nested;
     final id = payload['id'];
     if (id is! String || id.isEmpty) return;
-    final body = MessageContent.parse(payload['body']);
+    final previous = messages[id];
+    final body = MessageContent.fromEnvelope(payload['body'],
+        revokedAt: payload['revoked_at']);
+    final editableBody = payload['editable_body'];
+    final editableText = editableBody is Map<String, dynamic>
+        ? MessageContent.parse(editableBody).text
+        : previous?.editableText;
     final sender = payload['sender'];
     final name = sender is Map<String, dynamic> ? sender['name'] : null;
+    final nickname = sender is Map<String, dynamic> ? sender['nickname'] : null;
     final senderId = sender is Map<String, dynamic> ? sender['id'] : null;
     final conversationId = payload['conversation_id'];
+    final reply = payload['reply_to'];
+    final replySender = reply is Map<String, dynamic> ? reply['sender'] : null;
+    final replyNickname =
+        replySender is Map<String, dynamic> ? replySender['nickname'] : null;
+    final replyNameValue =
+        replySender is Map<String, dynamic> ? replySender['name'] : null;
+    final replySenderId =
+        replySender is Map<String, dynamic> ? replySender['id'] : null;
+    final replyName = replyNickname is String && replyNickname.trim().isNotEmpty
+        ? replyNickname.trim()
+        : replyNameValue is String && replyNameValue.trim().isNotEmpty
+            ? replyNameValue.trim()
+            : '用户';
+    final rawTopic = payload['topic'];
+    final topic = rawTopic is Map<String, dynamic>
+        ? MessageTopic.fromJson(rawTopic)
+        : previous?.topic;
+    final sequence = (payload['seq'] as num?)?.toInt() ?? previous?.sequence;
+    final author = nickname is String && nickname.trim().isNotEmpty
+        ? nickname.trim()
+        : name is String && name.trim().isNotEmpty
+            ? name.trim()
+            : previous?.author != null && previous!.author.trim().isNotEmpty
+                ? previous.author
+                : senderId is String && senderId.trim().isNotEmpty
+                    ? senderId
+                    : '成员';
+    final resolvedSenderId = senderId is String ? senderId : previous?.authorId;
+    final resolvedConversationId =
+        conversationId is String ? conversationId : previous?.conversationId;
+    final replyTo = body.type == 'revoked'
+        ? null
+        : reply is Map<String, dynamic> && reply['id'] is String
+            ? MessageReply(
+                id: reply['id'] as String,
+                author: replyName,
+                authorId: replySenderId is String ? replySenderId : null,
+                text: reply['summary'] is String &&
+                        (reply['summary'] as String).isNotEmpty
+                    ? reply['summary'] as String
+                    : '[消息]')
+            : previous?.replyTo;
     messages[id] = ChatMessage(
         id: id,
-        sequence: (payload['seq'] as num?)?.toInt(),
-        conversationId: conversationId is String ? conversationId : null,
-        author: name is String ? name : '用户',
+        sequence: sequence,
+        conversationId: resolvedConversationId,
+        authorId: resolvedSenderId,
+        author: author,
         contentType: body.type,
         rawBody: body.raw,
         text: body.text,
-        mine: senderId is String && senderId == currentUserId,
-        reactions: _reactions(payload['reactions']));
+        editableText: editableText,
+        replyTo: replyTo,
+        topic: topic,
+        mine: resolvedSenderId == null
+            ? previous?.mine ?? false
+            : resolvedSenderId == currentUserId,
+        choice: body.type == 'revoked'
+            ? null
+            : payload.containsKey('choice')
+                ? parseMessageChoiceState(payload['choice'])
+                : previous?.choice,
+        reactions: body.type == 'revoked'
+            ? const []
+            : payload.containsKey('reactions')
+                ? _reactions(payload['reactions'])
+                : previous?.reactions ?? const []);
   }
 
   List<MessageReaction> _reactions(Object? value) => value is List
@@ -117,9 +261,21 @@ class RealtimeStore extends ChangeNotifier {
           .map((item) => MessageReaction(
               text: item['text'] as String,
               count: (item['count'] as num?)?.toInt() ?? 0,
-              reactedByMe: item['reacted_by_me'] == true))
+              reactedByMe: item['reacted_by_me'] == true,
+              users: _reactionUsers(item['users'])))
           .where((reaction) => reaction.count > 0)
           .toList()
+      : const [];
+
+  List<MessageReactionUser> _reactionUsers(Object? value) => value is List
+      ? value
+          .whereType<Map<String, dynamic>>()
+          .where((item) =>
+              item['id'] is String && (item['id'] as String).trim().isNotEmpty)
+          .map((item) => MessageReactionUser(
+              id: item['id'] as String,
+              name: item['name'] is String ? item['name'] as String : ''))
+          .toList(growable: false)
       : const [];
 
   void _patchConversation(Map<String, dynamic> payload) {
@@ -142,6 +298,94 @@ class RealtimeStore extends ChangeNotifier {
             payload['muted'] is bool ? payload['muted'] as bool : current.muted,
         lastMessageSeq: (payload['last_message_seq'] as num?)?.toInt() ??
             current.lastMessageSeq,
-        members: current.members);
+        lastReadSeq: current.lastReadSeq,
+        lastMentionedSeq: current.lastMentionedSeq,
+        lastChoiceSeq: current.lastChoiceSeq,
+        members: current.members,
+        canSend: current.canSend,
+        topic: current.topic);
+  }
+
+  void _patchConversationReminder(Map<String, dynamic> payload, String event) {
+    final id = payload['conversation_id'];
+    final sequence = event == 'conversation.member_mentioned'
+        ? payload['last_mentioned_seq']
+        : payload['last_choice_seq'];
+    if (id is! String || sequence is! num) return;
+    final current = conversations[id];
+    if (current == null) return;
+    final value = sequence.toInt();
+    if (value <= 0) return;
+    conversations[id] = ChatConversation(
+        id: current.id,
+        title: current.title,
+        preview: current.preview,
+        announcement: current.announcement,
+        isPublic: current.isPublic,
+        avatar: current.avatar,
+        unread: current.unread,
+        pinned: current.pinned,
+        muted: current.muted,
+        lastMessageSeq: current.lastMessageSeq,
+        lastReadSeq: current.lastReadSeq,
+        lastMentionedSeq: event == 'conversation.member_mentioned'
+            ? value > current.lastMentionedSeq
+                ? value
+                : current.lastMentionedSeq
+            : current.lastMentionedSeq,
+        lastChoiceSeq: event == 'conversation.member_choice_received'
+            ? value > current.lastChoiceSeq
+                ? value
+                : current.lastChoiceSeq
+            : current.lastChoiceSeq,
+        type: current.type,
+        members: current.members,
+        canSend: current.canSend,
+        topic: current.topic);
+  }
+
+  void _patchTopic(Map<String, dynamic> payload, String event) {
+    final id = payload['conversation_id'];
+    final parentId = payload['parent_conversation_id'];
+    final sourceId = payload['source_message_id'];
+    if (id is! String ||
+        id.isEmpty ||
+        parentId is! String ||
+        parentId.isEmpty ||
+        sourceId is! String ||
+        sourceId.isEmpty) return;
+    final archived = payload['archived'] == true;
+    final current = conversations[id];
+    final topic = current?.topic;
+    if (current == null || topic == null) return;
+    if (topic.parentConversationId != parentId ||
+        topic.sourceMessageId != sourceId) return;
+    conversations[id] = ChatConversation(
+        id: current.id,
+        title: current.title,
+        preview: current.preview,
+        announcement: current.announcement,
+        isPublic: current.isPublic,
+        avatar: current.avatar,
+        unread: current.unread,
+        pinned: current.pinned,
+        muted: current.muted,
+        lastMessageSeq: current.lastMessageSeq,
+        lastReadSeq: current.lastReadSeq,
+        lastMentionedSeq: current.lastMentionedSeq,
+        lastChoiceSeq: current.lastChoiceSeq,
+        type: current.type,
+        members: current.members,
+        canSend: current.canSend && !archived,
+        topic: TopicMetadata(
+            archived: archived,
+            parentConversationId: topic.parentConversationId,
+            parentConversationName: topic.parentConversationName,
+            parentConversationType: topic.parentConversationType,
+            participating:
+                event == 'topic.participated' ? true : topic.participating,
+            sourceMessageId: topic.sourceMessageId,
+            sourceMessageSeq: topic.sourceMessageSeq,
+            sourceSender: topic.sourceSender));
   }
 }

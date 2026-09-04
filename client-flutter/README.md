@@ -1,7 +1,7 @@
 # MagicChat Flutter 客户端
 
 这是 desktop/mobile 共用的 Flutter 客户端工程，已生成 Android、iOS、Windows、macOS、Linux 及 Web 宿主目录。
-`lib/domain` 只放跨平台模型和仓储契约，`lib/data` 负责 HTTP/WebSocket，`lib/features` 负责页面，避免平台代码渗入 UI。
+`lib/domain` 只放跨平台模型，`lib/data` 负责仓储契约、HTTP/WebSocket 与平台适配，`lib/features/<domain>` 按业务垂直切分页面和交互，避免平台代码渗入 UI。通讯录与项目工作区已分别迁移到 `lib/features/contacts/` 和 `lib/features/projects/`，其余历史页面会按迁移矩阵逐步从 `main.dart` 拆出。
 
 ## 开发
 
@@ -18,8 +18,10 @@ CI 可使用同样的命令验证：`flutter pub get && dart format --set-exit-i
 
 仓库的 `client-flutter` GitHub Actions 会在相关目录变更时自动执行上述门禁，并构建 Web 与 Linux Debug 产物。
 
-Linux 构建需要系统安装 `clang++`、GTK3、`libsecret-1-dev` 和 CMake；在 Ubuntu/Debian 上可执行 `apt install clang libgtk-3-dev libsecret-1-dev` 后运行 `flutter build linux`。
+Linux 构建需要系统安装 `clang++`、GTK3、`libsecret-1-dev`、GStreamer 开发包和 CMake；在 Ubuntu/Debian 上可执行
+`apt install clang libgtk-3-dev libsecret-1-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev`
+后运行 `flutter build linux`。
 
 当前壳已覆盖原客户端的一级入口：消息、联系人、项目和设置，并提供登录/Server 配置入口。网络仓储契约对应 `/api/client/`，实时层对应既有 WebSocket envelope；迁移业务模块时只需替换 `MagicChatRepository` 实现，不改变页面导航。
 
-WebSocket 连接器必须由平台适配层注入，并通过 `Authorization: Bearer <token>` 发送凭据；不会把 Token 放进 URL 查询参数。
+WebSocket 连接器必须由平台适配层注入：Native 使用 `Authorization: Bearer <token>`，Web 使用浏览器自动携带的 HttpOnly `user_session` Cookie；不会把 Token 放进 URL 查询参数。

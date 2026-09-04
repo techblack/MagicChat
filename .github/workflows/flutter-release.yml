@@ -1,0 +1,285 @@
+name: Flutter Release
+
+on:
+  push:
+    tags:
+      - "flutter-v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flutter-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    defaults:
+      run:
+        working-directory: client-flutter
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.2
+          cache: true
+      - name: 校验发布版本
+        id: version
+        shell: bash
+        run: |
+          version="$(awk '/^version:/ { print $2; exit }' pubspec.yaml)"
+          version="${version%%+*}"
+          if [[ "$GITHUB_REF_NAME" != "flutter-v${version}" ]]; then
+            echo "标签 $GITHUB_REF_NAME 与 pubspec.yaml 版本 $version 不一致" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: 安装 Linux 测试依赖
+        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+      - run: flutter pub get
+      - name: 格式、静态分析和单元测试
+        run: |
+          dart format --set-exit-if-changed lib test test_driver
+          flutter analyze --no-fatal-infos
+          flutter test
+
+  android:
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: client-flutter
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.2
+          cache: true
+      - run: flutter pub get
+      - name: 构建 Android APK 和 AAB
+        run: |
+          flutter build apk --release --split-per-abi
+          flutter build appbundle --release
+          mkdir -p release-assets
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "release-assets/MagicChat-Flutter-${{ needs.quality.outputs.version }}-android-arm64-v8a.apk"
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk "release-assets/MagicChat-Flutter-${{ needs.quality.outputs.version }}-android-armeabi-v7a.apk"
+          cp build/app/outputs/flutter-apk/app-x86_64-release.apk "release-assets/MagicChat-Flutter-${{ needs.quality.outputs.version }}-android-x86_64.apk"
+          cp build/app/outputs/bundle/release/app-release.aab "release-assets/MagicChat-Flutter-${{ needs.quality.outputs.version }}-android.aab"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flutter-android
+          path: client-flutter/release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  ios:
+    needs: quality
+    runs-on: macos-15
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: client-flutter
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.2
+          cache: true
+      - run: flutter pub get
+      - name: 构建未签名 iOS 应用
+        run: |
+          flutter build ios --release --no-codesign
+          mkdir -p release-assets
+          ditto -c -k --sequesterRsrc --keepParent build/ios/iphoneos/Runner.app "release-assets/MagicChat-Flutter-${{ needs.quality.outputs.version }}-ios-unsigned.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flutter-ios
+          path: client-flutter/release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  macos:
+    needs: quality
+    runs-on: macos-15
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: client-flutter
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.2
+          cache: true
+      - run: flutter pub get
+      - name: 构建 macOS 应用
+        shell: bash
+        run: |
+          flutter build macos --release
+          app_path="$(find build/macos/Build/Products/Release -maxdepth 1 -name '*.app' -print -quit)"
+          test -n "$app_path"
+          mkdir -p release-assets
+          ditto -c -k --sequesterRsrc --keepParent "$app_path" "release-assets/MagicChat-Flutter-${{ needs.quality.outputs.version }}-macos.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flutter-macos
+          path: client-flutter/release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  windows:
+    needs: quality
+    runs-on: windows-2025
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: client-flutter
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.2
+          cache: true
+      - run: flutter pub get
+      - name: 构建 Windows 应用
+        shell: pwsh
+        run: |
+          flutter build windows --release
+          New-Item -ItemType Directory -Force release-assets | Out-Null
+          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath "release-assets\MagicChat-Flutter-${{ needs.quality.outputs.version }}-windows-x64.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flutter-windows
+          path: client-flutter/release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  linux:
+    needs: quality
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: x64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: client-flutter
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        if: matrix.arch == 'x64'
+        with:
+          flutter-version: 3.47.2
+          cache: true
+      - name: 安装 Flutter arm64 SDK
+        if: matrix.arch == 'arm64'
+        working-directory: ${{ runner.temp }}
+        run: |
+          git clone --depth 1 --branch 3.47.2 https://github.com/flutter/flutter.git flutter
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/flutter/bin/flutter" --version
+      - name: 安装 Linux 构建依赖
+        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+      - run: flutter pub get
+      - name: 构建 Linux 应用
+        run: |
+          flutter build linux --release
+          mkdir -p release-assets
+          tar -C "build/linux/${{ matrix.arch }}/release/bundle" -czf "release-assets/MagicChat-Flutter-${{ needs.quality.outputs.version }}-linux-${{ matrix.arch }}.tar.gz" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flutter-linux-${{ matrix.arch }}
+          path: client-flutter/release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  web:
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: client-flutter
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.2
+          cache: true
+      - run: flutter pub get
+      - name: 构建 Web 应用
+        run: |
+          flutter build web --release
+          mkdir -p release-assets
+          (cd build/web && zip -qr "../../release-assets/MagicChat-Flutter-${{ needs.quality.outputs.version }}-web.zip" .)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flutter-web
+          path: client-flutter/release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    needs: [quality, android, ios, macos, windows, linux, web]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          path: release-assets
+          merge-multiple: true
+      - name: 校验发布资产并生成校验和
+        shell: bash
+        run: |
+          version="${{ needs.quality.outputs.version }}"
+          expected=(
+            "MagicChat-Flutter-${version}-android-arm64-v8a.apk"
+            "MagicChat-Flutter-${version}-android-armeabi-v7a.apk"
+            "MagicChat-Flutter-${version}-android-x86_64.apk"
+            "MagicChat-Flutter-${version}-android.aab"
+            "MagicChat-Flutter-${version}-ios-unsigned.zip"
+            "MagicChat-Flutter-${version}-macos.zip"
+            "MagicChat-Flutter-${version}-windows-x64.zip"
+            "MagicChat-Flutter-${version}-linux-x64.tar.gz"
+            "MagicChat-Flutter-${version}-linux-arm64.tar.gz"
+            "MagicChat-Flutter-${version}-web.zip"
+          )
+          for asset in "${expected[@]}"; do
+            test -f "release-assets/$asset" || { echo "缺少发布资产：$asset" >&2; exit 1; }
+          done
+          (cd release-assets && sha256sum "${expected[@]}" > SHA256SUMS)
+      - name: 创建 GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          cat > release-notes.md <<'EOF'
+          本次 Release 包含 Android、iOS、macOS、Windows、Linux 和 Web 构建产物。
+
+          - Android APK/AAB 使用仓库当前测试签名，仅用于测试和私有分发。
+          - iOS ZIP 未签名，需要使用自己的 Apple 开发者证书重新签名后安装。
+          - `SHA256SUMS` 可用于校验所有下载产物。
+          EOF
+          gh release create "$GITHUB_REF_NAME" release-assets/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "MagicChat Flutter ${{ needs.quality.outputs.version }}" \
+            --notes-file release-notes.md \
+            --generate-notes

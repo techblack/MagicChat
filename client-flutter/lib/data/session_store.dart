@@ -35,6 +35,9 @@ class StoredAccount {
 }
 
 class SessionStore {
+  /// 浏览器登录只持有 HttpOnly user_session Cookie，不能从脚本读取真实 token。
+  static const cookieSessionToken = '__magicchat_cookie_session__';
+
   const SessionStore(
       {FlutterSecureStorage storage = const FlutterSecureStorage()})
       : _storage = storage;
@@ -43,7 +46,11 @@ class SessionStore {
 
   Future<String?> readToken() async {
     try {
-      return await _storage.read(key: 'magicchat.session.token');
+      // Some desktop keychain implementations can report a successful write
+      // but return no value until the keychain is unlocked. Keep the
+      // in-process token available so a just-completed login can proceed.
+      return await _storage.read(key: 'magicchat.session.token') ??
+          _fallbackToken;
     } on PlatformException {
       return _fallbackToken;
     }
